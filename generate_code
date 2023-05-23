@@ -1,0 +1,82 @@
+#!/usr/bin/env python
+import configparser
+
+import pandas as pd
+import psycopg2
+
+
+def get_code(sql, conn, table_schema, exclude_views, exclude_tablenames_like):
+    """
+    Uses information schema to generate dbdiagrams
+            ER diagram code
+    Parameters :
+            sql - sql string of information schema
+            conn - db connection
+    Returns :
+            code - dbdiagrams' code
+    """
+    sql = sql.replace("@table_schema", str.format("'{}'", table_schema))
+    df = pd.read_sql(sql, conn)
+    if exclude_views == "true":
+        df = df[df["table_type"] != "VIEW"]
+    del df["table_type"]
+    exclude_table_list = exclude_tablenames_like.split(",")
+    exclude_table_list = [item.strip() for item in exclude_table_list]
+    for tablename in exclude_table_list:
+        if len(tablename) > 0:
+            df = df[~df["table_name"].str.contains(tablename)]
+    tables = df["table_name"].unique()
+    code = ""
+    for table in tables:
+        code = code + str.format('\n\nTable "{}" {{\n', table)
+        tdf = df[df["table_name"] == table]
+        columns_code = ""
+        for index, row in tdf.iterrows():
+            is_pk = "[pk]" if row.is_pk == 1 else ""
+            columns_code = columns_code + str.format(
+                '"{}" {} {}\n', row.column_name, row.datatype, is_pk
+            )
+        code = code + columns_code + "}"
+    code = code + get_refs(df)
+    return code
+
+
+def get_refs(df):
+    """
+    Returns the references part of dbdiagrams code
+    """
+    refs = "\n\n"
+    pks_df = df[df["is_pk"] == 1]
+    non_pks_df = df[df["is_pk"] == 0]
+    for index, row in pks_df.iterrows():
+        for n_index, nrow in non_pks_df.iterrows():
+            if nrow.column_name == row.column_name:
+                refs = refs + str.format(
+                    'Ref: "{}"."{}" < "{}"."{}"\n',
+                    row.table_name,
+                    row.column_name,
+                    nrow.table_name,
+                    nrow.column_name,
+                )
+
+    return refs
+
+
+def main():
+    config = configparser.ConfigParser()
+    config.read("settings.conf")
+    conn_string = config["Common"]["conn_string"]
+    table_schema = config["Common"]["table_schema"]
+    exclude_views = config["Common"]["exclude_views"]
+    exclude_tablenames_like = config["Common"]["exclude_tablenames_like"]
+    sql = config["SQL"]["query"]
+    out_file = config["Common"]["output_filepath"]
+    conn = psycopg2.connect(conn_string)
+    code = get_code(sql, conn, table_schema, exclude_views, exclude_tablenames_like)
+    with open(out_file, "w") as text_file:
+        text_file.write(code)
+    print(str.format("Success! generated code saved in {} file", out_file))
+
+
+if __name__ == "__main__":
+    main()
