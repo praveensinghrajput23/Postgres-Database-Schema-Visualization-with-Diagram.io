@@ -1,4 +1,4 @@
-#Postgres Database Schema Visualization with Diagram.io
+# Postgres Database Schema Visualization with Diagram.io
 
 this tool helps you quickly generate beautiful database/ER diagrams for your postgres db schema :
 
