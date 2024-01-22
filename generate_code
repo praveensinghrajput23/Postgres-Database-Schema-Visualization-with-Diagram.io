@@ -50,7 +50,7 @@ def get_refs(df):
     non_pks_df = df[df["is_pk"] == 0]
     for index, row in pks_df.iterrows():
         for n_index, nrow in non_pks_df.iterrows():
-            if nrow.column_name == row.column_name:
+            if f"{nrow.column_name}" == f"{row.table_name}_{row.column_name}":
                 refs = refs + str.format(
                     'Ref: "{}"."{}" < "{}"."{}"\n',
                     row.table_name,
